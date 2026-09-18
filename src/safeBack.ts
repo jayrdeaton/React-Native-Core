@@ -5,10 +5,30 @@ import type { OptionalModule } from './OptionalModule'
 // `typeof import('expo-router')`, which would still force the type-checker to resolve the real
 // package and defeat the point of not hard-depending on it (same reasoning as @rific/scanner's
 // and @rific/resizable-input's own local type mirrors of expo-camera/react-native-paper).
+//
+// `replace`'s own `href` parameter is deliberately typed `any`, not `string` — an app with Expo
+// Router's `experiments.typedRoutes` enabled has a real `router.replace` whose `href` parameter is
+// narrowed to that app's own generated union of valid route strings, not a general `string`.
+// Confirmed (broke exactly this way the first time a typed-routes app — Solitaire — tried to
+// configure this, and confirmed the fix in isolation with a standalone tsc repro before landing it
+// here): under `strictFunctionTypes`, a real router's narrower `replace` is NOT structurally
+// assignable to a `string`-typed `replace` — function parameters are checked contravariantly, and a
+// function accepting only specific literals can't stand in for one promising to accept any string.
+// Switching the interface member to method-shorthand syntax does NOT fix this either (verified —
+// method bivariance doesn't rescue this case). Since every real app's own Href union is a distinct,
+// unique generated type this file can never name in advance, there is no single non-`any` type that
+// stays assignable from every app's own router while also staying callable from safeBack's own
+// `router.replace(fallbackPath)` below (`fallbackPath` is always a plain `string`, always `'/'` by
+// default) — `any` is the deliberate, narrowest-possible escape hatch that satisfies both directions
+// at once, not a lazy fallback. `canGoBack`/`back` take no parameters, so they have no such variance
+// concern either way.
 export type SafeBackRouter = {
-  canGoBack: () => boolean
-  back: () => void
-  replace: (href: string) => void
+  canGoBack(): boolean
+  back(): void
+  // Deliberate `any` — see the doc comment above (no non-any type stays assignable from every
+  // app's own unique typed-routes Href union while also staying callable with a plain string).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  replace(href: any): void
 }
 
 export type SafeBackConfig = {
