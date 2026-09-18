@@ -6,6 +6,13 @@
 // wrinkles: a merging `initialize`, an overridable reducer factory, and per-field selectors) as
 // plain config, not new logic.
 
+// redux-persist's own REHYDRATE action-type constant, inlined as a literal rather than taking a
+// dependency on the package itself — this factory otherwise has no opinion on whether the
+// consuming app uses redux-persist at all, and the string itself is a long-stable part of
+// redux-persist's own public contract (unchanged across every major version). See the returned
+// reducer's own REHYDRATE case below for why this needs handling at all.
+const REHYDRATE = 'persist/REHYDRATE'
+
 export type SettingsAction<P> = { payload: P; type: string }
 
 type ActionCreator<P> = {
@@ -104,7 +111,21 @@ export function createSettingsSlice<T extends object, Mode extends InitializeMod
 
   function createReducer(overrideInitialState?: Partial<T>): SettingsReducer<T> {
     const initial = { ...initialState, ...overrideInitialState }
-    return (state: T = initial, action: { type: string }): T => reduce(state, action)
+    return (state: T = initial, action: { type: string }): T => {
+      // redux-persist's own default stateReconciler (autoMergeLevel1) HARD-REPLACES this slice's
+      // entire persisted sub-state on rehydration rather than backfilling missing fields (confirmed
+      // against autoMergeLevel1's actual source: `newState[key] = inboundState[key]`, not a merge) —
+      // so a device with a blob persisted before a new field existed would otherwise rehydrate with
+      // that field `undefined`, and any consumer reading it with no fallback breaks. Spreading
+      // `initial` (this reducer instance's own resolved default, honoring `overrideInitialState`)
+      // first, then the incoming state, then the persisted value, backfills exactly that gap — the
+      // same pattern @tastic/profile's createSeatColorsSlice already uses for its equivalent shape.
+      if (action.type === REHYDRATE) {
+        const persisted = (action as { payload?: Record<string, Partial<T>> }).payload?.[namespace]
+        return { ...initial, ...state, ...persisted }
+      }
+      return reduce(state, action)
+    }
   }
 
   const selectorsObj = Object.fromEntries(selectors.map((field) => [`select${capitalize(field)}`, (state: T) => state[field]])) as unknown as SettingsSliceResult<T, Mode, SetterFields, SelectorFields>['selectors']

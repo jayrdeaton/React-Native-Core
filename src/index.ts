@@ -5,3 +5,5 @@ export { createSettingHook, createSettingsContext } from './createSettingsContex
 export type { CreateSettingsSliceOptions, InitializeMode, SettingsAction, SettingsReducer, SettingsSliceResult } from './createSettingsSlice'
 export { createSettingsSlice } from './createSettingsSlice'
 export type { OptionalModule } from './OptionalModule'
+export type { SafeBackConfig, SafeBackRouter } from './safeBack'
+export { configureNavigation, getNavigationConfig, safeBack } from './safeBack'

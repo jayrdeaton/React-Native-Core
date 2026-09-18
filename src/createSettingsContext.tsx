@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 export type SettingsContextValue<T> = {
   settings: T
@@ -38,17 +38,36 @@ export function createSettingsContext<T extends object>(defaults: T): SettingsCo
     // Read via a ref rather than closed over directly, so `set`'s identity never changes just
     // because the caller passed a fresh `onChange` closure this render — a consumer that memoizes
     // off `set`'s stability (or hands it deep into a tree) doesn't re-render every time the app's
-    // own onChange callback is redefined.
+    // own onChange callback is redefined. Mirrored inside an effect, not a bare assignment during
+    // render — a ref-mirroring idiom inconsistency a later fleet-wide audit flagged: @tastic/core's
+    // OrientationProvider (this factory's own named motivating duplicate) mirrors its equivalent
+    // ref this way already; this file was the one holdout still doing it during render.
     const onChangeRef = useRef(onChange)
-    onChangeRef.current = onChange
+    useEffect(() => {
+      onChangeRef.current = onChange
+    })
 
     const set = useCallback((patch: Partial<T>) => {
-      setSettings((prev) => {
-        const next = { ...prev, ...patch }
-        onChangeRef.current?.(next)
-        return next
-      })
+      setSettings((prev) => ({ ...prev, ...patch }))
     }, [])
+
+    // onChange fires here, not inside the setSettings updater above, because a useState updater
+    // function must be pure — React can (and does, e.g. while resolving a queued update during a
+    // later render of this very Provider) invoke it outside the original set() call's own event/
+    // effect, and calling onChange from in there was a real bug: it let a consumer's onChange (e.g.
+    // auto-paper's Theme.tsx, which dispatches to Redux) fire synchronously mid-render of some
+    // unrelated component, tripping React's "Cannot update a component while rendering a different
+    // component" warning. isFirstRender skips the mount-time run so onChange still only fires once
+    // per real set() call, matching this function's original contract (never called just for
+    // initialValue/defaults seeding).
+    const isFirstRender = useRef(true)
+    useEffect(() => {
+      if (isFirstRender.current) {
+        isFirstRender.current = false
+        return
+      }
+      onChangeRef.current?.(settings)
+    }, [settings])
 
     return <Context.Provider value={{ settings, set }}>{children}</Context.Provider>
   }

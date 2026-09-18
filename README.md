@@ -9,6 +9,9 @@ Required foundation for `@rific/*` packages: a home for cross-cutting utilities 
   zero dependency on `@reduxjs/toolkit` (or any Redux library at all).
 - `createModuleConfig` — a generic module-level config singleton, for injecting an optional peer
   module (`react-native-paper`, `expo-camera`, etc.) without a hard dependency on it.
+- `safeBack` — a zero-argument expo-router back-navigation guard (falls back to a configured path
+  instead of throwing when there's no back-stack to pop), built on `createModuleConfig` so this
+  package still doesn't hard-depend on `expo-router`.
 
 ## Why this exists
 
@@ -121,6 +124,38 @@ Plain module-level state, not React Context — this is one-time app setup ("doe
 components have already rendered won't retroactively update them. Fine for startup config, not for
 runtime toggling.
 
+## `safeBack` — expo-router back-navigation guard
+
+Same injection pattern as `createModuleConfig` above, applied to one concrete case: guarding
+`router.back()` against expo-router's "GO_BACK was not handled by any navigator" error toast when a
+screen has no back-stack to pop (a deep link, a refresh, a tab's very first navigation).
+
+```ts
+// src/utils/navigation.ts — once, at module load
+import { router } from 'expo-router'
+import { configureNavigation, safeBack } from '@rific/core'
+
+configureNavigation({ router })
+
+export { safeBack }
+```
+
+```tsx
+import { safeBack } from '@/utils/navigation'
+
+<Button onPress={safeBack}>Back</Button>
+// or call it directly: safeBack()
+```
+
+`safeBack()` is zero-argument on purpose, so it keeps working as a bare callback reference
+(`onBack={safeBack}`) everywhere it's used. It reads the router back out via `getNavigationConfig()`
+instead of taking one as a parameter: no router configured is a no-op; otherwise it calls
+`router.back()` when `router.canGoBack()`, else `router.replace(fallbackPath)` (default `'/'`,
+overridable via `configureNavigation({ fallbackPath })`). `configureNavigation`/`getNavigationConfig`
+are just that one `createModuleConfig<SafeBackConfig>` instance's own `configure`/`getConfig`, so
+`expo-router` itself is never imported by this package — `SafeBackRouter` mirrors only the 3 methods
+`safeBack` actually calls (`canGoBack`/`back`/`replace`).
+
 ## `OptionalModule<T>`
 
 Names the convention several packages already follow for the `paper`/`camera`/`autoPaper`-style
@@ -145,3 +180,6 @@ npm install @rific/core
   plain `react`), but declared up front to match every other `@rific`/`@tastic` foundation package,
   since this is meant to grow into a home for other cross-cutting utilities the same way
   `@tastic/core` did.
+- `expo-router` (>=57.0.0) — optional (`peerDependenciesMeta.optional`). Only needed if you use
+  `safeBack`, and even then this package never imports `expo-router` itself — you inject your own
+  `router` via `configureNavigation({ router })`.

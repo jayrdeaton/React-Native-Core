@@ -96,4 +96,45 @@ describe('createSettingsSlice', () => {
       expect(selectors.selectColor(state)).toBe('#000000')
     })
   })
+
+  // Mirrors seatColorsSlice.test.ts's own REHYDRATE describe block: redux-persist's default
+  // stateReconciler (autoMergeLevel1) hard-replaces a slice's persisted sub-state on rehydration
+  // rather than backfilling missing fields, so createSettingsSlice's own reducer must handle
+  // 'persist/REHYDRATE' itself to backfill.
+  describe('REHYDRATE', () => {
+    type HapticSettings = { sound: boolean; vibrate: boolean }
+    const initialState: HapticSettings = { sound: true, vibrate: true }
+
+    it('backfills a field missing from a persisted blob that predates it, instead of leaving it undefined', () => {
+      const { reducer } = createSettingsSlice('haptic', { initialState })
+      // Simulates a persisted blob from before `sound` existed on this slice's shape — no such key
+      // at all, not even `undefined` explicitly, the same shape a real old AsyncStorage blob has.
+      const staleState = { vibrate: false } as HapticSettings
+      const action = { type: 'persist/REHYDRATE', payload: { haptic: staleState } }
+
+      const state = reducer(staleState, action)
+
+      expect(state.sound).toBe(initialState.sound)
+      expect(state.vibrate).toBe(false)
+    })
+
+    it('leaves state as the merge of initial+state with no crash when no key in the payload matches this namespace', () => {
+      const { reducer } = createSettingsSlice('haptic', { initialState })
+      const state = { sound: false, vibrate: false }
+      const action = { type: 'persist/REHYDRATE', payload: { theme: { appearance: 'system' } } }
+
+      expect(reducer(state, action)).toEqual({ ...initialState, ...state })
+    })
+
+    it('respects an overrideInitialState passed to createReducer when backfilling', () => {
+      const { createReducer } = createSettingsSlice('haptic', { initialState })
+      const overriddenReducer = createReducer({ sound: false })
+      const staleState = { vibrate: false } as HapticSettings
+      const action = { type: 'persist/REHYDRATE', payload: { haptic: staleState } }
+
+      const state = overriddenReducer(staleState, action)
+
+      expect(state).toEqual({ sound: false, vibrate: false })
+    })
+  })
 })

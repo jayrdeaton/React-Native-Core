@@ -8,7 +8,7 @@ Required foundation for `@rific/*` packages — a home for cross-cutting utiliti
 app can use directly, the same dual role `@tastic/core` plays for `@tastic/*` game packages: other
 `@rific` packages can build on it internally, and apps import from it directly too.
 
-Three exports, each extracting one shape duplicated across the fleet:
+Four exports, each extracting one shape duplicated across the fleet:
 
 - `createSettingsContext` — `feedback-press` (sound + haptics), `scroll-view`, and `auto-paper`'s
   `ThemeProvider` each independently hand-roll the same `{settings, set}` Context + `initialValue`/
@@ -22,6 +22,15 @@ Three exports, each extracting one shape duplicated across the fleet:
   module-level `let config` / `configureX` / `getXConfig` / `XProvider` singleton for one-time
   optional-peer-module injection (paper, camera, etc.), explicitly self-documented in each package's
   own source as "every @rific package wires up the same way this way."
+- `safeBack` (with `configureNavigation`/`getNavigationConfig`) — `game.tsx`, `loadout.tsx`/
+  `lobby.tsx`, `achievements.tsx`, and `profiles.tsx` in all 5 `@tastic`-fleet apps (Snake, AirHockey,
+  BoxHockey, Pong, LightCycles) each imported an identical `router.canGoBack() ? router.back() :
+  router.replace('/')` guard from their own `src/utils/navigation.ts`, dodging expo-router's
+  "GO_BACK was not handled by any navigator" toast on a screen reached with no back-stack to pop.
+  Built on `createModuleConfig`, same as the three packages above, since a hard
+  `import { router } from 'expo-router'` in this package would be its first real dependency beyond
+  react/react-native peers — see "New export: safeBack" below for the full design and one deliberate
+  deviation from how it was originally proposed.
 
 Plus `OptionalModule<T>` (`= T | undefined`), naming (not implementing anything new for) the
 optional-peer-injection convention several packages already follow independently — a shared type to
@@ -92,10 +101,13 @@ src/
   createSettingsSlice.ts      - createSettingsSlice (Redux reducer+action-creator factory)
   createModuleConfig.tsx      - createModuleConfig (module-level config singleton + Provider)
   OptionalModule.ts           - OptionalModule<T> type + the shared injection-convention doc comment
+  safeBack.ts                 - safeBack/configureNavigation/getNavigationConfig (expo-router
+                                 back-navigation guard, built on createModuleConfig)
   __tests__/
     createSettingsContext.test.tsx
     createSettingsSlice.test.ts
     createModuleConfig.test.tsx
+    safeBack.test.ts
 ```
 
 ### `createSettingsContext<T>(defaults)`
@@ -145,6 +157,21 @@ React Context — this is one-time app setup, not per-render reactive state. `Pr
 any descendant component renders on the same pass. Two independent `createModuleConfig()` calls never
 share state (each closure owns its own `config` variable).
 
+### `safeBack()` / `configureNavigation()` / `getNavigationConfig()`
+
+`configureNavigation`/`getNavigationConfig` are one `createModuleConfig<SafeBackConfig>({ fallbackPath:
+'/' })` instance's own `configure`/`getConfig`, renamed at the export boundary for readability.
+`SafeBackConfig` is `{ router?: OptionalModule<SafeBackRouter>; fallbackPath: string }` — `router` is
+an *optional key*, not just an `OptionalModule`-typed (`T | undefined`) value; see "New export:
+safeBack" below for why that's a deliberate correction, not what was originally proposed.
+`SafeBackRouter` hand-mirrors only the 3 expo-router `router` methods actually used (`canGoBack`,
+`back`, `replace`) as a local type — this file never imports `expo-router` for real.
+
+`safeBack()` itself is zero-argument and reads the injected config back out via `getConfig()`: no
+`router` configured → no-op; `router.canGoBack()` → `router.back()`; otherwise →
+`router.replace(fallbackPath)`. No `Provider` — see "New export: safeBack" for why this one doesn't
+need the ordering guarantee a `Provider` exists to give.
+
 ## Public API
 
 From `src/index.ts`:
@@ -157,6 +184,8 @@ From `src/index.ts`:
 - `createModuleConfig` — the module-config-singleton factory; `ModuleConfigProviderProps`/
   `ModuleConfigResult` (types)
 - `OptionalModule` (type only)
+- `safeBack` — the back-navigation guard; `configureNavigation`/`getNavigationConfig` (the injection
+  setter/getter it's built on); `SafeBackRouter`/`SafeBackConfig` (types)
 
 ## Peer Dependencies
 
@@ -165,6 +194,14 @@ From `src/index.ts`:
   `react`). Declared anyway, matching `@tastic/core`'s own peers, since this package is meant to grow
   the same way that one did — adding the peer now avoids a breaking peerDependencies bump the day a
   future export actually needs it.
+- `expo-router` >=57.0.0 — declared `optional: true` in `peerDependenciesMeta`. `safeBack.ts` never
+  actually imports it (only hand-mirrors 3 of its `router` methods as a local `SafeBackRouter` type),
+  so this adds no real install requirement; it's here purely so a consumer's own tooling can see the
+  relationship. Follows `@rific/scanner`'s fuller precedent (its 3 injected/mirrored peers —
+  `expo-camera`, `react-native-paper`, `react-native-safe-area-context` — are all declared this way)
+  rather than `@rific/resizable-input`'s gap (its own `react-native-paper` injection, the identical
+  pattern, isn't declared as a peer anywhere) — the fleet hasn't enforced this with 100% consistency,
+  so don't read `resizable-input`'s omission as the "real" convention.
 
 ## Testing
 
@@ -180,7 +217,80 @@ From `src/index.ts`:
   replacing, `Provider` calling `configure` synchronously during render with its own props (minus
   `children`), `Provider` still rendering its children, and that two independent
   `createModuleConfig()` calls don't share state.
-- 100% statement/branch/function/line coverage across all three source files.
+- `safeBack.test.ts` covers all 4 real branches against a hand-built mock `SafeBackRouter`:
+  `canGoBack() → true` calls `back()`; `→ false` calls `replace(fallbackPath)`; a custom
+  `fallbackPath` override; and the no-router-configured no-op. Resets `configureNavigation({ router:
+  undefined, fallbackPath: '/' })` in a `beforeEach` since `configure` merges rather than replaces, so
+  a router configured by one test would otherwise leak into the next. This closes what was previously
+  a zero-coverage gap fleet-wide — no test in any of the 5 apps this was extracted from ever exercised
+  the fallback branch (a grep for `canGoBack` in any app's `src/` hit only its own `navigation.ts`,
+  never a test), and 3 of those 5 apps' global `__mocks__/expo-router.ts` (AirHockey, BoxHockey,
+  LightCycles) don't even define a `canGoBack` field — a pre-existing per-app gap this extraction
+  doesn't fix, since it's this package's own mock, not theirs, that the new test exercises.
+- 100% statement/branch/function/line coverage across all four source files.
+
+## Bug fixes (2026-09-17)
+
+**`createSettingsContext`'s `set()` called the consumer's `onChange` *inside* the `useState` updater passed to `setSettings` — a genuine "Cannot update a component while rendering a different component" React bug, found live in AirHockey's `/loadout` screen.** A `useState` updater function must be pure: React can invoke it outside the originating `set()` call's own event/effect (e.g. replaying a queued update while resolving a later render of the very same Provider), and when that happened here, `onChange` (which a consumer like `@rific/auto-paper`'s `Theme.tsx` wires straight to `dispatch(themeActions.initialize(...))`) fired synchronously mid-render of an unrelated component. Fixed by moving the `onChange` call out of the updater and into a `useEffect` keyed on the settled `settings` value, guarded by an `isFirstRender` ref so the mount-time run is skipped — `onChange` still only fires for a real `set()` call, never for `initialValue`/`defaults` seeding, matching the original contract. This factory backs `@rific/auto-paper`'s `Theme`, `@rific/feedback-press`'s haptic/sound settings, and `@rific/scroll-view`'s settings context alike, so every consumer gets the fix for free. `@tastic/core` had the identical shape independently duplicated (not through this factory) in `createGameSettingsProvider` and the old hand-rolled `OrientationProvider` — see that package's own CLAUDE.md. Now `0.1.2` (patch, no API change).
+
+**`onChangeRef`'s own mirroring was a bare `onChangeRef.current = onChange` assignment during render, not effect-based — the one holdout in a fleet-wide "ref-mirroring idiom" audit.** Every other ref-mirror in the fleet (including `@tastic/core`'s `OrientationProvider`, this factory's own motivating duplicate) does `useEffect(() => { ref.current = value })` with no dependency array, not a bare render-time assignment — flagged by ESLint's `react-hooks/refs` rule (part of the React-Compiler-derived ruleset in `eslint-plugin-react-hooks@7.1.1`) as a real, if here low-risk, pattern to avoid: a bare render-time write happens during *every* render pass including ones React may throw away, whereas an effect only commits once the render is actually kept. Fixed to match — `onChangeRef.current = onChange` now runs inside a no-deps `useEffect` instead. Safe by the same reasoning as every other instance: `onChangeRef` is only ever read from inside `set`'s callback, never during another component's render.
+
+## Bug fixes (2026-09-18)
+
+**`createSettingsSlice`'s `createReducer` had no `REHYDRATE` handling — the same redux-persist hard-replace-on-rehydrate exposure already found and fixed once for `@tastic/profile`'s `createSeatColorsSlice`, just not yet triggered because none of this factory's real consumers (`theme`, `haptic`, `sound`, `scrollView`) had grown a field since they first shipped.** `redux-persist`'s default `autoMergeLevel1` stateReconciler hard-replaces a slice's entire persisted sub-state on rehydration unless the slice's own reducer handles `REHYDRATE` to backfill. Fixed by adding a `REHYDRATE = 'persist/REHYDRATE'` case (inlined as a literal, same reasoning as `createSeatColorsSlice`'s own comment) to the returned reducer, backfilling `{ ...initial, ...state, ...persisted }` — `initial` being this reducer instance's own resolved default (honoring `overrideInitialState`), not the raw `initialState` parameter. Confirmed via reading all 4 real consumers (`@rific/auto-paper`'s `themeSlice.ts`, `@rific/feedback-press`'s `hapticSlice.ts`/`soundSlice.ts`, `@rific/scroll-view`'s `scrollViewSlice.ts`) and all 5 apps' `store.ts` files that `namespace` (the factory's own first argument, e.g. `'theme'`) is always identical to the mount key each app uses in its `combineReducers` call — so no new parameter was needed here, unlike `createSeatColorsSlice`'s separate `mountKey` (there, `namespace` is the app name, a different string entirely). 3 new tests added to `src/__tests__/createSettingsSlice.test.ts`. Now `0.1.3` (patch, no API change).
+
+## New export: safeBack (2026-09-18)
+
+**Fourth `createModuleConfig` consumer, and the first one that isn't a UI component.**
+`src/utils/navigation.ts` was byte-for-byte identical across all 5 `@tastic`-fleet apps (Snake,
+AirHockey, BoxHockey, Pong, LightCycles): `router.canGoBack() ? router.back() :
+router.replace('/')`, guarding against expo-router's "GO_BACK was not handled by any navigator" error
+toast on a screen reached with no back-stack to pop (a deep link, a refresh, a tab's very first
+navigation). Every call site across `game.tsx`, `loadout.tsx`/`lobby.tsx`, `achievements.tsx`, and
+`profiles.tsx` in every app uses `safeBack` both invoked directly (`safeBack()`) **and** passed as a
+bare callback reference (`onBack={safeBack}`, `onHome={safeBack}`, `onConfirm={safeBack}`) — that
+second usage is why the extracted function had to stay strictly zero-argument: any parameterized
+signature (e.g. `safeBack(router)`) would force roughly 20 call sites fleet-wide into wrapped arrow
+functions.
+
+Zero-argument, plus this package's zero-hard-dependency posture (see the top of this file), creates a
+real tension: a plain `import { router } from 'expo-router'` inside `safeBack.ts` would be this
+package's first-ever hard dependency. Resolved the same way `drawer`/`scanner`/`resizable-input`
+resolve their own optional-peer injections: each app's own (now ~5-line) `src/utils/navigation.ts`
+calls `configureNavigation({ router })` once at module load, passing in its own real
+`import { router } from 'expo-router'`; `safeBack()` reads that injected router back out of
+`createModuleConfig`'s module-level singleton instead of taking it as a parameter; and
+`SafeBackRouter` mirrors only the 3 methods actually used (`canGoBack`/`back`/`replace`) as a
+hand-written local type — never `typeof import('expo-router')`, which would still force the
+type-checker to resolve the real package and defeat the point. See Peer Dependencies above for the
+`expo-router` `peerDependenciesMeta` entry this added, and why it follows `scanner`'s precedent rather
+than `resizable-input`'s gap.
+
+**One deliberate deviation from how this was originally proposed:** `SafeBackConfig.router` is
+`router?: OptionalModule<SafeBackRouter>` — an optional *key* — not the originally-proposed
+`router: OptionalModule<SafeBackRouter>` (a required key, only the *value* nullable via
+`OptionalModule<T> = T | undefined`). The difference matters at the one call site that builds a
+default: `createModuleConfig<SafeBackConfig>({ fallbackPath: '/' })`. With `router` required,
+TypeScript needs that object literal to include it — `{ fallbackPath: '/' }` alone is missing a
+required property, so it would have to be spelled out as `{ router: undefined, fallbackPath: '/' }`
+just to type-check. Making the key itself optional avoids that, and it isn't a one-off improvisation:
+it's the same `field?: T` shape `@rific/scanner`'s `ScannerConfig` (`camera?`/`paper?`) and
+`@rific/resizable-input`'s `ResizableInputConfig` (`TextInputComponent?`) already use for their own
+injected peers — confirmed by reading both files directly. So this is a correction that brings
+`safeBack.ts` in line with the fleet's real convention, not a drift away from it; if a future
+`createModuleConfig` consumer's config type has an injected-peer field, give it an optional key from
+the start rather than copying the literal shape this package's own doc comment originally proposed.
+
+**No `NavigationProvider` component**, unlike `ScannerProvider`/`ResizableInputProvider`. Those wrap a
+component that reads its injected config synchronously during *its own* render, which is why
+`createModuleConfig`'s `Provider` calls `configure()` during render rather than in an effect — solving
+a real first-render ordering hazard. `safeBack` is a plain function called later from event handlers,
+well after the module graph — including each app's one `configureNavigation({ router })` call — has
+already finished evaluating. There's no ordering hazard to solve here, so a `Provider` would be pure
+ceremony.
+
+Test coverage and the pre-existing per-app `canGoBack` mock gap this extraction surfaced (but doesn't
+itself fix) are covered under Testing above. Now `0.1.4`.
 
 ## Code Style
 
