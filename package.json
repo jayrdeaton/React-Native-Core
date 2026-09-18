@@ -1,6 +1,6 @@
 {
   "name": "@rific/core",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Required foundation for @rific/* packages: createSettingsContext + createSettingsSlice for a live, patchable settings object (Context and Redux, respectively), and createModuleConfig for one-time optional-peer-module injection",
   "keywords": [
     "react-native",
