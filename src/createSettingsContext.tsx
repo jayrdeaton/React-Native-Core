@@ -7,11 +7,16 @@ export type SettingsContextValue<T> = {
 
 export type SettingsProviderProps<T> = {
   children: ReactNode
-  // Rehydrates from the consuming app's own storage at mount time — this factory (like every
+  // Seeds state from the consuming app's own storage at mount time. This factory (like every
   // hand-rolled settings Provider it replaces) deliberately does no persistence of its own. The app
-  // decides where, or whether, `settings` gets saved.
+  // decides where, or whether, `settings` gets saved. Also live after mount: when a key's value in
+  // a later `initialValue` differs from the previous one, the Provider adopts it, so an app that
+  // passes Redux state here can dispatch a settings action and see it take effect. Keys whose
+  // value did not change are left alone, so local `set()` calls are never clobbered by an
+  // unrelated re-render, and `undefined` values are ignored.
   initialValue?: Partial<T>
-  // Fires with the full settings object on every `set` call — the app's hook into persisting it.
+  // Fires with the full settings object whenever settings change after mount: every `set` call, and
+  // every adopted initialValue change. The app's hook into persisting it.
   onChange?: (settings: T) => void
 }
 
@@ -51,6 +56,37 @@ export function createSettingsContext<T extends object>(defaults: T): SettingsCo
       setSettings((prev) => ({ ...prev, ...patch }))
     }, [])
 
+    // The last settings object handed to onChange. A new initialValue that merely echoes it back
+    // (the app wrote onChange into Redux and Redux fed it straight back in as initialValue) is not a
+    // real external change, and adopting it could undo a newer local set() that happened while the
+    // echo was in flight.
+    const emittedRef = useRef<T | null>(null)
+
+    // Adopts initialValue changes after mount (see SettingsProviderProps). Compared per key against
+    // the previous initialValue, so an inline object literal with the same values each render is a
+    // no-op, and the updater returns `current` unchanged when nothing differs, so no extra render
+    // or onChange happens.
+    const prevInitialRef = useRef(initialValue)
+    useEffect(() => {
+      const prev = prevInitialRef.current
+      prevInitialRef.current = initialValue
+      if (!initialValue || initialValue === prev) return
+      const emitted = emittedRef.current
+      setSettings((current) => {
+        let next: T | null = null
+        for (const key of Object.keys(initialValue) as Array<keyof T>) {
+          const value = initialValue[key]
+          if (value === undefined) continue
+          if (prev && Object.is(prev[key], value)) continue
+          if (emitted && Object.is(emitted[key], value)) continue
+          if (Object.is(current[key], value)) continue
+          next = next ?? { ...current }
+          next[key] = value as T[keyof T]
+        }
+        return next ?? current
+      })
+    }, [initialValue])
+
     // onChange fires here, not inside the setSettings updater above, because a useState updater
     // function must be pure — React can (and does, e.g. while resolving a queued update during a
     // later render of this very Provider) invoke it outside the original set() call's own event/
@@ -66,6 +102,7 @@ export function createSettingsContext<T extends object>(defaults: T): SettingsCo
         isFirstRender.current = false
         return
       }
+      emittedRef.current = settings
       onChangeRef.current?.(settings)
     }, [settings])
 

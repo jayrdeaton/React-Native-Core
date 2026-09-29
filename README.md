@@ -47,6 +47,15 @@ export const { Provider: OrientationLockProvider, useSettings: useOrientationLoc
 </OrientationLockProvider>
 ```
 
+`initialValue` seeds the Provider at mount and stays live afterwards. When a key's value in a new
+`initialValue` differs from the previous one, the Provider adopts it, so passing Redux state in and
+dispatching a settings action elsewhere (for example from a settings screen) updates every
+`useSettings()` consumer. Keys whose value did not change are left alone, so a local `set()` is never
+overwritten by an unrelated re-render, `undefined` values are ignored, and a new object with the
+same values is a no-op. A value that only echoes what the Provider last reported through `onChange`
+is ignored too, so the usual round trip (`onChange` dispatches to Redux, Redux feeds `initialValue`)
+cannot loop or undo a newer change. `onChange` fires for adopted changes as well as `set()` calls.
+
 For the common case of a caller that only needs one field of the settings object as a plain
 `{value, setValue}` pair (mirrors `useOrientationLock`/`useSoundSettings`/`useHapticSettings`'s own
 shape), wrap the generated `useSettings` with `createSettingHook`:
