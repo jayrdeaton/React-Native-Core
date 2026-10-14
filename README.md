@@ -3,13 +3,13 @@
 Required foundation for `@rific/*` packages: a home for cross-cutting utilities every
 `@rific`-consuming app can use directly.
 
-- `createSettingsContext` — a generic Context/Provider/hook factory for a live, patchable settings
+- `createSettingsContext`: a generic Context/Provider/hook factory for a live, patchable settings
   object whose persistence the consuming app owns.
-- `createSettingsSlice` — the same idea for Redux: a generic reducer + action-creator factory, with
+- `createSettingsSlice`: the same idea for Redux: a generic reducer + action-creator factory, with
   zero dependency on `@reduxjs/toolkit` (or any Redux library at all).
-- `createModuleConfig` — a generic module-level config singleton, for injecting an optional peer
+- `createModuleConfig`: a generic module-level config singleton, for injecting an optional peer
   module (`react-native-paper`, `expo-camera`, etc.) without a hard dependency on it.
-- `safeBack` — a zero-argument expo-router back-navigation guard (falls back to a configured path
+- `safeBack`: a zero-argument expo-router back-navigation guard (falls back to a configured path
   instead of throwing when there's no back-stack to pop), built on `createModuleConfig` so this
   package still doesn't hard-depend on `expo-router`.
 
@@ -19,14 +19,14 @@ Required foundation for `@rific/*` packages: a home for cross-cutting utilities 
 the same ~30-line shape independently: a Context holding `{settings, set}`, a Provider taking
 `initialValue`/`onChange` so the app decides where (or whether) the setting is persisted, and an
 inert no-Provider-mounted default so nothing crashes if it's used without one. Each of those same
-three packages *also* independently hand-rolls an equivalent Redux slice — the exact same
+three packages *also* independently hand-rolls an equivalent Redux slice - the exact same
 `createAction`/`.match()`/if-chain reducer, copy-pasted verbatim across all four files that need it
 (`hapticSlice.ts`, `soundSlice.ts`, `scrollViewSlice.ts`, `themeSlice.ts`). And `drawer`, `scanner`,
 and `resizable-input` each hand-roll the same module-level `let config` / `configureX` / `getXConfig`
 / `XProvider` singleton for one-time optional-peer injection. `createSettingsContext`,
 `createSettingsSlice`, and `createModuleConfig` are each one of those shapes, written once.
 
-## `createSettingsContext` — Context-based settings
+## `createSettingsContext` - Context-based settings
 
 ```ts
 import { createSettingsContext } from '@rific/core'
@@ -71,7 +71,7 @@ A settings object with several fields a caller patches together at once (e.g. so
 better served calling the generated `useSettings()` directly and patching as needed, rather than one
 `createSettingHook` per field.
 
-## `createSettingsSlice` — Redux-based settings
+## `createSettingsSlice` - Redux-based settings
 
 Same settings shape, for apps that persist through Redux instead of (or alongside) a Context. No
 dependency on `@reduxjs/toolkit`: works with RTK stores, vanilla Redux, or any reducer-based state
@@ -89,7 +89,7 @@ export const { actions: hapticActions, reducer: hapticReducer } = createSettings
 ```
 
 By default every field of `initialState` gets its own `setX` action (`setVibrate`, `setEnabled`,
-...) and `initialize` replaces the whole state wholesale — matching the fleet's most common shape.
+...) and `initialize` replaces the whole state wholesale - matching the fleet's most common shape.
 Three optional knobs cover the rest:
 
 ```ts
@@ -99,15 +99,15 @@ export const { actions: themeActions, reducer: themeReducer, createReducer: crea
   selectors: ['appearance', 'color'] // adds selectAppearance(state)/selectColor(state)
 })
 
-// createReducer lets a consumer override the default initial state at construction time —
+// createReducer lets a consumer override the default initial state at construction time -
 // independent of the runtime `initialize` action:
 const reducer = createThemeReducer({ color: DEFAULT_APP_COLOR })
 ```
 
-To expose zero per-field setters (only `initialize`), pass `fieldSetters: []` — useful for a
+To expose zero per-field setters (only `initialize`), pass `fieldSetters: []` - useful for a
 settings object an app only ever replaces wholesale, never patches one field at a time.
 
-## `createModuleConfig` — optional peer-module injection
+## `createModuleConfig` - optional peer-module injection
 
 ```ts
 import { createModuleConfig } from '@rific/core'
@@ -122,25 +122,25 @@ export const { configure: configureMyPackage, getConfig: getMyPackageConfig, Pro
 ```
 
 ```tsx
-// App root — either call configure directly, or mount the generated Provider:
+// App root - either call configure directly, or mount the generated Provider:
 <MyPackageProvider paper={RNPaper}>
   <App />
 </MyPackageProvider>
 ```
 
-Plain module-level state, not React Context — this is one-time app setup ("does this app have
+Plain module-level state, not React Context - this is one-time app setup ("does this app have
 `react-native-paper`?"), not per-render reactive state, so calling `configure` again after
 components have already rendered won't retroactively update them. Fine for startup config, not for
 runtime toggling.
 
-## `safeBack` — expo-router back-navigation guard
+## `safeBack` - expo-router back-navigation guard
 
 Same injection pattern as `createModuleConfig` above, applied to one concrete case: guarding
 `router.back()` against expo-router's "GO_BACK was not handled by any navigator" error toast when a
 screen has no back-stack to pop (a deep link, a refresh, a tab's very first navigation).
 
 ```ts
-// src/utils/navigation.ts — once, at module load
+// src/utils/navigation.ts - once, at module load
 import { router } from 'expo-router'
 import { configureNavigation, safeBack } from '@rific/core'
 
@@ -162,7 +162,7 @@ instead of taking one as a parameter: no router configured is a no-op; otherwise
 `router.back()` when `router.canGoBack()`, else `router.replace(fallbackPath)` (default `'/'`,
 overridable via `configureNavigation({ fallbackPath })`). `configureNavigation`/`getNavigationConfig`
 are just that one `createModuleConfig<SafeBackConfig>` instance's own `configure`/`getConfig`, so
-`expo-router` itself is never imported by this package — `SafeBackRouter` mirrors only the 3 methods
+`expo-router` itself is never imported by this package - `SafeBackRouter` mirrors only the 3 methods
 `safeBack` actually calls (`canGoBack`/`back`/`replace`).
 
 ## `OptionalModule<T>`
@@ -172,7 +172,7 @@ props above: mirror only the small slice of the injected module's shape you actu
 type (never `typeof import('the-real-package')`, which still forces the type-checker to resolve the
 real module), accept it as an explicit prop rather than auto-detecting it (Metro doesn't rewrite a
 `require()`-in-`try/catch` call into its module graph inside an ESM build, so auto-detection breaks
-silently), and degrade gracefully when it's omitted. `OptionalModule<T>` is just `T | undefined` —
+silently), and degrade gracefully when it's omitted. `OptionalModule<T>` is just `T | undefined` -
 its only value is giving that convention one name to point back to instead of re-deriving the
 reasoning fresh in every package's own doc comment.
 
@@ -185,10 +185,10 @@ npm install @rific/core
 ## Peer Dependencies
 
 - `react` (>=19.0.0)
-- `react-native` (>=0.76.0) — not imported by anything in this package yet (every export here is
+- `react-native` (>=0.76.0): not imported by anything in this package yet (every export here is
   plain `react`), but declared up front to match every other `@rific`/`@tastic` foundation package,
   since this is meant to grow into a home for other cross-cutting utilities the same way
   `@tastic/core` did.
-- `expo-router` (>=57.0.0) — optional (`peerDependenciesMeta.optional`). Only needed if you use
-  `safeBack`, and even then this package never imports `expo-router` itself — you inject your own
+- `expo-router` (>=57.0.0): optional (`peerDependenciesMeta.optional`). Only needed if you use
+  `safeBack`, and even then this package never imports `expo-router` itself - you inject your own
   `router` via `configureNavigation({ router })`.

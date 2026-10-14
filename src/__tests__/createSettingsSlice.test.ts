@@ -33,7 +33,7 @@ describe('createSettingsSlice', () => {
     })
   })
 
-  // Mirrors scrollViewSlice.ts: several fields, zero per-field setters — initialize is the only action.
+  // Mirrors scrollViewSlice.ts: several fields, zero per-field setters - initialize is the only action.
   describe('multi-field, no setters (scrollView shape)', () => {
     type ScrollViewSettings = { footerFixed: boolean; headerFixed: boolean; snapBack: boolean }
     const initialState: ScrollViewSettings = { footerFixed: false, headerFixed: false, snapBack: true }
@@ -107,7 +107,7 @@ describe('createSettingsSlice', () => {
 
     it('backfills a field missing from a persisted blob that predates it, instead of leaving it undefined', () => {
       const { reducer } = createSettingsSlice('haptic', { initialState })
-      // Simulates a persisted blob from before `sound` existed on this slice's shape — no such key
+      // Simulates a persisted blob from before `sound` existed on this slice's shape - no such key
       // at all, not even `undefined` explicitly, the same shape a real old AsyncStorage blob has.
       const staleState = { vibrate: false } as HapticSettings
       const action = { type: 'persist/REHYDRATE', payload: { haptic: staleState } }

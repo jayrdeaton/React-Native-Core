@@ -8,12 +8,12 @@
 //    silently breaks the moment a consumer's bundler resolves the package's ESM entry point.
 // 2. So instead, accept the module as an explicit injected prop (e.g. `paper?: OptionalModule<PaperModuleShape>`)
 //    and have the consuming app pass `import * as RNPaper from 'react-native-paper'` itself.
-// 3. Mirror only the small slice of the module's shape you actually use as a local type — never
+// 3. Mirror only the small slice of the module's shape you actually use as a local type - never
 //    `typeof import('the-real-package')`, which still forces the type-checker to resolve the real
 //    module and defeats the point of not hard-depending on it.
 // 4. Degrade gracefully when the prop is omitted (a plain fallback UI, a no-op), never throw.
 //
-// This type is deliberately trivial (`T | undefined`) — its value is giving that convention one
+// This type is deliberately trivial (`T | undefined`) - its value is giving that convention one
 // name every package's own doc comment can point back to, instead of re-deriving the same
 // reasoning independently each time a new optional peer gets injected.
 export type OptionalModule<T> = T | undefined

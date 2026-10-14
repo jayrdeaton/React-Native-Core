@@ -11,7 +11,7 @@ function createMockRouter(canGoBack: boolean): SafeBackRouter {
 
 describe('safeBack', () => {
   beforeEach(() => {
-    // Reset to a clean slate before every test — configureNavigation merges rather than replaces,
+    // Reset to a clean slate before every test - configureNavigation merges rather than replaces,
     // so a router configured by one test would otherwise leak into the next.
     configureNavigation({ router: undefined, fallbackPath: '/' })
   })

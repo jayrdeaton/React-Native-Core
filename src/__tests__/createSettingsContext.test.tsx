@@ -37,8 +37,8 @@ describe('createSettingsContext', () => {
     expect(onChange).toHaveBeenCalledWith({ locked: true, label: 'default' })
   })
 
-  // renderHook's own `wrapper` option only ever forwards `children` — not `initialProps`/rerender's
-  // argument (see @testing-library/react's own RenderHookOptions type) — so a changing `onChange`
+  // renderHook's own `wrapper` option only ever forwards `children` - not `initialProps`/rerender's
+  // argument (see @testing-library/react's own RenderHookOptions type) - so a changing `onChange`
   // has to reach the wrapper through a closure variable it re-reads on every render, not through a
   // prop rerender() appears to pass.
   it("keeps set()'s identity stable across a changing onChange prop", () => {
