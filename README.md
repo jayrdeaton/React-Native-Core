@@ -3,6 +3,8 @@
 Required foundation for `@rific/*` packages: a home for cross-cutting utilities every
 `@rific`-consuming app can use directly.
 
+**[Live demo](https://rific.jaydeaton.com/demos/core)**
+
 - `createSettingsContext`: a generic Context/Provider/hook factory for a live, patchable settings
   object whose persistence the consuming app owns.
 - `createSettingsSlice`: the same idea for Redux: a generic reducer + action-creator factory, with
@@ -12,6 +14,9 @@ Required foundation for `@rific/*` packages: a home for cross-cutting utilities 
 - `safeBack`: a zero-argument expo-router back-navigation guard (falls back to a configured path
   instead of throwing when there's no back-stack to pop), built on `createModuleConfig` so this
   package still doesn't hard-depend on `expo-router`.
+- Keep Awake (`KeepAwakeProvider`, `useKeepAwake`, `useKeepAwakeSettings`, `keepAwakeReducer`): an
+  opt-in, persisted "keep the screen on" setting plus the hook that honors it, with `expo-keep-awake`
+  injected by the app so this package never imports it.
 
 ## Why this exists
 
@@ -165,6 +170,62 @@ are just that one `createModuleConfig<SafeBackConfig>` instance's own `configure
 `expo-router` itself is never imported by this package - `SafeBackRouter` mirrors only the 3 methods
 `safeBack` actually calls (`canGoBack`/`back`/`replace`).
 
+## Keep Awake - opt-in "keep the screen on" setting
+
+Stops the screen from dimming and auto-locking on a screen where nobody touches it for a while (a
+game steered by tilt, a long think between turns, a map that's recording). Built from the pieces
+above: a `createSettingsContext` setting (`{ enabled: boolean }`, default `true`), a
+`createSettingsSlice` slice to persist it, and one hook. Nothing happens until the app mounts the
+Provider with `expo-keep-awake` passed in, so apps that don't opt in are unaffected.
+
+```tsx
+// App root, once. Same bridge shape as feedback-press's sound/haptics.
+import { keepAwakeActions, KeepAwakeProvider, type KeepAwakeSettings } from '@rific/core'
+import * as ExpoKeepAwake from 'expo-keep-awake'
+
+const KeepAwakeBridge = ({ children }: Props) => {
+  const keepAwake = useSelector((state: RootState) => state.keepAwake)
+  const dispatch = useDispatch()
+  const onChange = useCallback((settings: KeepAwakeSettings) => dispatch(keepAwakeActions.initialize(settings)), [dispatch])
+  return (
+    <KeepAwakeProvider expoKeepAwake={ExpoKeepAwake} initialValue={keepAwake} onChange={onChange}>
+      {children}
+    </KeepAwakeProvider>
+  )
+}
+```
+
+```ts
+// store.ts: mount the slice under `keepAwake` (its namespace, which its REHYDRATE handling expects)
+import { keepAwakeReducer } from '@rific/core'
+
+const rootReducer = combineReducers({ /* ... */ keepAwake: keepAwakeReducer })
+```
+
+```tsx
+// The screen that needs it (a game's /game), not app-wide:
+import { useKeepAwake } from '@rific/core'
+
+useKeepAwake('game')
+// Only some of the time? A hook can't be conditional, so pass `active`:
+useKeepAwake('map', { active: recording })
+```
+
+- `useKeepAwake(tag?, { active? })` keeps the screen awake while the calling component is mounted,
+  the setting is on, `active` is true (the default), and a module was injected. `tag` defaults to one
+  unique to that hook instance, so two callers never release each other's lock. Failed
+  `expo-keep-awake` calls are swallowed: on web, activation is refused where the wake-lock
+  Permissions-Policy is missing (a browser iframe), and deactivation rejects when no lock is held.
+- `useKeepAwakeSettings()` is the `{ settings, set }` pair for a settings screen's toggle.
+- `useExpoKeepAwake()` returns the injected module, or `undefined` when there isn't one. A settings
+  screen should hide its toggle in that case, since it would do nothing. `@tastic/hud`'s settings
+  dialog does exactly this.
+- `keepAwakeActions.initialize(settings)` / `keepAwakeActions.setEnabled(value)` and
+  `keepAwakeReducer` are the slice; `defaultKeepAwakeSettings` is `{ enabled: true }`.
+
+Unlike `createModuleConfig`, the module is held in React Context (like `@rific/auto-paper`'s
+`expoBlur`), because a settings UI reads it to decide whether to show the toggle at all.
+
 ## `OptionalModule<T>`
 
 Names the convention several packages already follow for the `paper`/`camera`/`autoPaper`-style
@@ -192,3 +253,6 @@ npm install @rific/core
 - `expo-router` (>=57.0.0): optional (`peerDependenciesMeta.optional`). Only needed if you use
   `safeBack`, and even then this package never imports `expo-router` itself - you inject your own
   `router` via `configureNavigation({ router })`.
+- `expo-keep-awake` (>=12.0.0): optional. Only needed for Keep Awake, and only as the module you pass
+  to `KeepAwakeProvider`'s `expoKeepAwake` prop; this package never imports it. 12.0.0 is the first
+  version with `activateKeepAwakeAsync`.

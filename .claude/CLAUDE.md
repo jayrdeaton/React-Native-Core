@@ -8,7 +8,7 @@ Required foundation for `@rific/*` packages - a home for cross-cutting utilities
 app can use directly, the same dual role `@tastic/core` plays for `@tastic/*` game packages: other
 `@rific` packages can build on it internally, and apps import from it directly too.
 
-Four exports, each extracting one shape duplicated across the fleet:
+Five exports, each extracting one shape duplicated across the fleet:
 
 - `createSettingsContext` - `feedback-press` (sound + haptics), `scroll-view`, and `auto-paper`'s
   `ThemeProvider` each independently hand-roll the same `{settings, set}` Context + `initialValue`/
@@ -31,12 +31,17 @@ Four exports, each extracting one shape duplicated across the fleet:
   `import { router } from 'expo-router'` in this package would be its first real dependency beyond
   react/react-native peers - see "New export: safeBack" below for the full design and one deliberate
   deviation from how it was originally proposed.
+- Keep Awake (`KeepAwakeProvider`/`useKeepAwake`/`useKeepAwakeSettings`/`useExpoKeepAwake`/
+  `keepAwakeReducer`/`keepAwakeActions`) - Snake, LightCycles, Pong, AirHockey, and BoxHockey each
+  copied a `keepAwake` settings field, the `keepAwake`/`onKeepAwakeChange` pair for `@tastic/hud`'s
+  settings dialog, and an identical `expo-keep-awake` effect in `game.tsx`; Utility and Crumby each
+  had their own drifted `KeepAwake` component. See "New export: Keep Awake" below.
 
 Plus `OptionalModule<T>` (`= T | undefined`), naming (not implementing anything new for) the
 optional-peer-injection convention several packages already follow independently - a shared type to
 point a doc comment at instead of re-deriving the Metro/ESM auto-detection reasoning fresh each time.
 
-Part of the `@rific` package ecosystem. Not yet published - see Release below.
+Part of the `@rific` package ecosystem. Published on npm (see Release below).
 
 ## Commands
 
@@ -53,29 +58,18 @@ npm run verify      # lint + test + typecheck + build, in that order
 
 Always run `npm run lint` before finishing any task.
 
-## Local development (yalc)
+## Consumers
 
-Not yet published to the registry - every consumer below is linked via yalc during this pre-release
-phase:
-
-```bash
-npm run build && yalc publish   # from this package
-cd ../react-native-feedback-press && yalc add @rific/core && npm install
-```
-
-Re-run `npm run build && yalc push` after any change to propagate it to every linked consumer.
-
-**Current yalc consumers** (all migrated and verified - typecheck/test/lint/build green, public API
-unchanged), by which factory they use:
+Every consumer takes this from npm now (the pre-release yalc links are gone). By what they use:
 
 - `createSettingsContext` + `createSettingsSlice`: `@rific/feedback-press`, `@rific/auto-paper`,
   `@rific/scroll-view`
 - `createModuleConfig`: `@rific/drawer`, `@rific/scanner`, `@rific/resizable-input`
+- Keep Awake: `@tastic/hud`'s settings dialog reads `useKeepAwakeSettings`/`useExpoKeepAwake`; the
+  games and apps mount the Provider and call `useKeepAwake`.
 
-Once this package has a real npm release, each of those six gets `yalc remove @rific/core`, its
-`package.json` peer/dev entry pinned to a real published semver range, and `npm install` - no source
-changes needed at that point, only the dependency resolution switches from the local yalc link to
-the registry.
+To try an unreleased change in one consumer, `npm pack` here and `npm install --no-save <tarball>`
+there. Never `yalc push`: it rewrites `package.json` in every registered project.
 
 ## Release
 
@@ -88,8 +82,7 @@ npm run release:patch   # npm version patch && git push --follow-tags (or releas
 
 `preversion` runs `npm run verify` first. `publish.yml` fires on `v*` tags and delegates to the shared
 reusable workflow (`infinitetoken/Workflows/.github/workflows/npm-publish.yml@v1`) with `id-token: write`
-permission for OIDC trusted publishing. Nothing has been tagged or published yet - this repo exists
-locally only, no `v0.1.0` tag pushed.
+permission for OIDC trusted publishing.
 
 ## Architecture
 
@@ -103,11 +96,14 @@ src/
   OptionalModule.ts           - OptionalModule<T> type + the shared injection-convention doc comment
   safeBack.ts                 - safeBack/configureNavigation/getNavigationConfig (expo-router
                                  back-navigation guard, built on createModuleConfig)
+  keepAwake.tsx               - Keep Awake: settings context + slice, KeepAwakeProvider (injected
+                                 expo-keep-awake in React Context), useKeepAwake
   __tests__/
     createSettingsContext.test.tsx
     createSettingsSlice.test.ts
     createModuleConfig.test.tsx
     safeBack.test.ts
+    keepAwake.test.tsx
 ```
 
 ### `createSettingsContext<T>(defaults)`
@@ -186,6 +182,9 @@ From `src/index.ts`:
 - `OptionalModule` (type only)
 - `safeBack` - the back-navigation guard; `configureNavigation`/`getNavigationConfig` (the injection
   setter/getter it's built on); `SafeBackRouter`/`SafeBackConfig` (types)
+- `KeepAwakeProvider`, `useKeepAwake`, `useKeepAwakeSettings`, `useExpoKeepAwake`,
+  `KeepAwakeSettingsContext`, `keepAwakeActions`, `keepAwakeReducer`, `defaultKeepAwakeSettings`;
+  `KeepAwakeSettings`/`KeepAwakeProviderProps`/`ExpoKeepAwakeModule`/`UseKeepAwakeOptions` (types)
 
 ## Peer Dependencies
 
@@ -202,6 +201,11 @@ From `src/index.ts`:
   rather than `@rific/resizable-input`'s gap (its own `react-native-paper` injection, the identical
   pattern, isn't declared as a peer anywhere) - the fleet hasn't enforced this with 100% consistency,
   so don't read `resizable-input`'s omission as the "real" convention.
+- `expo-keep-awake` >=12.0.0 - optional, same reasoning as `expo-router`: `keepAwake.tsx` only
+  mirrors `activateKeepAwakeAsync`/`deactivateKeepAwake` as `ExpoKeepAwakeModule` and the app injects
+  the real module. 12.0.0 (2023-02) is the first version with `activateKeepAwakeAsync`, so that's the
+  floor, not the devDependency's version. It's also a devDependency (the `specify-peers-locally` lint
+  rule requires it, and `keepAwake.test.tsx` type-checks the real module against the mirror).
 
 ## Testing
 
@@ -227,7 +231,13 @@ From `src/index.ts`:
   never a test), and 3 of those 5 apps' global `__mocks__/expo-router.ts` (AirHockey, BoxHockey,
   LightCycles) don't even define a `canGoBack` field - a pre-existing per-app gap this extraction
   doesn't fix, since it's this package's own mock, not theirs, that the new test exercises.
-- 100% statement/branch/function/line coverage across all four source files.
+- `keepAwake.test.tsx` covers: the no-Provider and no-module no-ops, activate on mount and deactivate
+  on unmount with the given tag, a unique default tag per hook instance, the persisted setting (off
+  via `initialValue`, toggled live with `onChange` reporting it), `active`, swallowed rejections from
+  both calls, the slice's namespaced actions, and a compile-time check that the real
+  `expo-keep-awake` module satisfies `ExpoKeepAwakeModule`.
+- 100% statement/branch/function/line coverage on every source file except one unreached branch in
+  `createSettingsContext.tsx`.
 
 ## Bug fixes (2026-09-17)
 
@@ -291,6 +301,32 @@ ceremony.
 
 Test coverage and the pre-existing per-app `canGoBack` mock gap this extraction surfaced (but doesn't
 itself fix) are covered under Testing above. Now `0.1.4`.
+
+## New export: Keep Awake (2026-10-17)
+
+Keep Awake first shipped on 2026-10-15 as a `@tastic/hud` dialog row that only toggled a value the
+app passed in (`keepAwake`/`onKeepAwakeChange`), with each game keeping the screen on itself, so hud
+took no native dependency. That meant every game copied the same settings field, props, and
+`game.tsx` effect, and every game still missing it would need all three. Jay's call: upstream is
+always preferred, and it isn't worth its own package for ~40 lines, so it lives here, opt-in.
+
+- **Built from this package's own pieces.** `createSettingsContext<KeepAwakeSettings>` (default
+  `{ enabled: true }`) and `createSettingsSlice('keepAwake', ...)`, so the app owns persistence
+  exactly like feedback-press's sound/haptics: a `KeepAwakeBridge` in the app's `Providers.tsx` feeds
+  Redux state in as `initialValue` and dispatches `keepAwakeActions.initialize` from `onChange`.
+- **The module is injected through React Context, not `createModuleConfig`.** hud's dialog shows the
+  row only when `useExpoKeepAwake()` returns a module, so it has to reflect the tree it renders in.
+  Same choice as auto-paper's `expoBlur` / `useBlurModule()`. The prop is `expoKeepAwake`, matching
+  `expoBlur`.
+- **`useKeepAwake(tag?, { active? })`** keeps the screen on while mounted and enabled. The default tag
+  is the hook's `useId()`, so two callers never release each other's lock (expo-keep-awake releases
+  per tag). Both calls swallow rejections, carried over from Utility's `KeepAwake` component, which
+  had hit them on web: activation is refused in an iframe without the wake-lock Permissions-Policy,
+  and deactivation rejects when nothing is held. `active` exists for Crumby-style "only while
+  recording" use, since a hook can't be conditional.
+- **Rollout still to do** once this is released: hud reads the setting (done alongside, unreleased),
+  then each game swaps its own field/props/effect for the bridge + `useKeepAwake('game')`, the games
+  without it get the same, and Utility/Crumby replace their own `KeepAwake` components.
 
 ## Code Style
 

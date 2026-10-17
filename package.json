@@ -1,7 +1,7 @@
 {
   "name": "@rific/core",
   "version": "0.3.1",
-  "description": "Required foundation for @rific/* packages: createSettingsContext + createSettingsSlice for a live, patchable settings object (Context and Redux, respectively), and createModuleConfig for one-time optional-peer-module injection",
+  "description": "Required foundation for @rific/* packages: createSettingsContext + createSettingsSlice for a live, patchable settings object (Context and Redux, respectively), createModuleConfig for one-time optional-peer-module injection, and an opt-in Keep Awake setting + hook",
   "keywords": [
     "react-native",
     "react",
@@ -9,7 +9,8 @@
     "context",
     "provider",
     "state",
-    "redux"
+    "redux",
+    "keep-awake"
   ],
   "homepage": "https://github.com/jayrdeaton/react-native-core#readme",
   "bugs": {
@@ -61,8 +62,8 @@
   "prettier": "@infinitetoken/eslint-config/prettier",
   "devDependencies": {
     "@infinitetoken/eslint-config": "^0.2.0",
-    "@infinitetoken/jest-config": "^0.4.0",
-    "@infinitetoken/tsconfig": "^0.5.0",
+    "@infinitetoken/jest-config": "^0.5.2",
+    "@infinitetoken/tsconfig": "^0.6.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
@@ -70,22 +71,27 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-native": "^5.0.0",
-    "expo-router": "~57.0.21",
+    "expo-keep-awake": "~58.0.3",
+    "expo-router": "~58.0.23",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "prettier": "^3.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-native": "^0.86.3",
+    "react-native": "^0.88.0",
     "tsup": "^8.0.0",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
+    "expo-keep-awake": ">=12.0.0",
     "expo-router": ">=57.0.0",
     "react": ">=19.0.0",
     "react-native": ">=0.76.0"
   },
   "peerDependenciesMeta": {
+    "expo-keep-awake": {
+      "optional": true
+    },
     "expo-router": {
       "optional": true
     }
