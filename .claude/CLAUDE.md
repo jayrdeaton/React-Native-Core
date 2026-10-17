@@ -98,12 +98,14 @@ src/
                                  back-navigation guard, built on createModuleConfig)
   keepAwake.tsx               - Keep Awake: settings context + slice, KeepAwakeProvider (injected
                                  expo-keep-awake in React Context), useKeepAwake
+  canKeepAwake.ts             - canKeepAwake(): true on native, Screen Wake Lock present on web
   __tests__/
     createSettingsContext.test.tsx
     createSettingsSlice.test.ts
     createModuleConfig.test.tsx
     safeBack.test.ts
     keepAwake.test.tsx
+    canKeepAwake.test.ts      - node environment (no document), standing in for native
 ```
 
 ### `createSettingsContext<T>(defaults)`
@@ -236,8 +238,15 @@ From `src/index.ts`:
   via `initialValue`, toggled live with `onChange` reporting it), `active`, swallowed rejections from
   both calls, the slice's namespaced actions, and a compile-time check that the real
   `expo-keep-awake` module satisfies `ExpoKeepAwakeModule`.
-- 100% statement/branch/function/line coverage on every source file except one unreached branch in
-  `createSettingsContext.tsx`.
+- `keepAwake.test.tsx` also covers (2026-10-17): the module withheld without `navigator.wakeLock`
+  (jsdom has none, so a `beforeEach` adds a stand-in), the lock asked for again on
+  `visibilitychange` to visible and not after unmount, deactivate waiting for an activation in
+  flight, and a quick off-then-on releasing before it activates again. Each test flushes with a
+  `setTimeout(0)` inside `act`, since every call now waits on the queue.
+- 100% statement/function/line coverage on every source file. Branches: one unreached in
+  `createSettingsContext.tsx`, and `useKeepAwake`'s no-`document` (native) side of the
+  `visibilitychange` listener, which jsdom can't reach (`renderHook` needs a DOM); `canKeepAwake`'s
+  native side is covered in the node environment.
 
 ## Bug fixes (2026-09-17)
 
@@ -327,6 +336,34 @@ always preferred, and it isn't worth its own package for ~40 lines, so it lives 
 - **Rollout still to do** once this is released: hud reads the setting (done alongside, unreleased),
   then each game swaps its own field/props/effect for the bridge + `useKeepAwake('game')`, the games
   without it get the same, and Utility/Crumby replace their own `KeepAwake` components.
+
+## Keep Awake on web (2026-10-17)
+
+Jay found the Keep Awake row in Hangman's Settings in the desktop app's preview pane and took it for
+a desktop-web leak. It wasn't: hud shows the row on touch-first browsers (the pane is narrower than
+`@tastic/core`'s 700px phone breakpoint), and expo-keep-awake's web build is the Screen Wake Lock
+API, which works there. His rule is to hide whatever isn't available on web, and two real gaps
+came out of checking it:
+
+- **The module is withheld where the platform can't keep awake.** `KeepAwakeProvider` passes
+  `canKeepAwake() ? expoKeepAwake : undefined` into its context. `canKeepAwake` (`src/canKeepAwake.ts`,
+  not exported) is true with no `document` (native) and otherwise `'wakeLock' in navigator`, the same
+  check expo-keep-awake's own web `isAvailableAsync` makes. So `useKeepAwake` does nothing and hud's
+  row (`isTouchPrimary && useExpoKeepAwake() !== undefined`) hides with no hud change. Feature
+  detection rather than `Platform.OS`, so this package still imports nothing from `react-native`.
+  Read at render time, not at import, so tests can toggle `navigator.wakeLock`.
+- **The lock is asked for again when the page is visible again.** A browser releases a wake lock
+  whenever the page is hidden and never restores it, so before this the screen could lock after a
+  player switched apps mid-round and came back. `useKeepAwake` listens for `visibilitychange` (only
+  when there's a `document`) and activates again on `visible`. Native keeps its lock across
+  backgrounding.
+- **Calls run one at a time** (a per-hook-instance promise queue in a ref, kept across effect runs).
+  Web's `navigator.wakeLock.request` is async: an unmount before it resolved used to deactivate
+  first (rejected, swallowed) and leave the late lock held after the screen was gone, and with
+  re-activation a quick off-then-on could have the old run's deactivate release the new run's lock
+  (same tag). The cost: activation now starts a microtask after the effect, not inside it.
+- Not a breaking change for apps or hud. Still to do: release (Jay's call on the version), then
+  apps on `^0.4.0` pick it up with a normal update.
 
 ## Code Style
 

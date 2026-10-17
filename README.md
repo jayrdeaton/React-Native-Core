@@ -216,10 +216,14 @@ useKeepAwake('map', { active: recording })
   unique to that hook instance, so two callers never release each other's lock. Failed
   `expo-keep-awake` calls are swallowed: on web, activation is refused where the wake-lock
   Permissions-Policy is missing (a browser iframe), and deactivation rejects when no lock is held.
+  On web it asks for the lock again each time the page is visible again, since a browser releases
+  it whenever the page is hidden (another tab, another app, the screen off). Its calls run one at a
+  time, so leaving the screen before the lock arrives still releases it.
 - `useKeepAwakeSettings()` is the `{ settings, set }` pair for a settings screen's toggle.
-- `useExpoKeepAwake()` returns the injected module, or `undefined` when there isn't one. A settings
-  screen should hide its toggle in that case, since it would do nothing. `@tastic/hud`'s settings
-  dialog does exactly this.
+- `useExpoKeepAwake()` returns the injected module, or `undefined` when there isn't one or the
+  platform can't keep the screen awake: a browser without the Screen Wake Lock API (older
+  browsers, and iPhone home-screen web apps before iOS 18.4). A settings screen should hide its
+  toggle in that case, since it would do nothing. `@tastic/hud`'s settings dialog does exactly this.
 - `keepAwakeActions.initialize(settings)` / `keepAwakeActions.setEnabled(value)` and
   `keepAwakeReducer` are the slice; `defaultKeepAwakeSettings` is `{ enabled: true }`.
 
