@@ -362,8 +362,8 @@ came out of checking it:
   first (rejected, swallowed) and leave the late lock held after the screen was gone, and with
   re-activation a quick off-then-on could have the old run's deactivate release the new run's lock
   (same tag). The cost: activation now starts a microtask after the effect, not inside it.
-- Not a breaking change for apps or hud. Still to do: release (Jay's call on the version), then
-  apps on `^0.4.0` pick it up with a normal update.
+- Not a breaking change for apps or hud. Released as 0.4.1 (2026-10-17); apps on `^0.4.0` pick it
+  up with a normal update, and hud's devDependency moved to `^0.4.1` (peer floor unchanged).
 
 ## Code Style
 
