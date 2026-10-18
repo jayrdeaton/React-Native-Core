@@ -9,3 +9,4 @@ export { defaultKeepAwakeSettings, keepAwakeActions, KeepAwakeProvider, keepAwak
 export type { OptionalModule } from './OptionalModule'
 export type { SafeBackConfig, SafeBackRouter } from './safeBack'
 export { configureNavigation, getNavigationConfig, safeBack } from './safeBack'
+export { callWorkletCallback, useWorkletCallback } from './workletCallbacks'

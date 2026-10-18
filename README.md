@@ -230,6 +230,19 @@ useKeepAwake('map', { active: recording })
 Unlike `createModuleConfig`, the module is held in React Context (like `@rific/auto-paper`'s
 `expoBlur`), because a settings UI reads it to decide whether to show the toggle at all.
 
+## `useWorkletCallback` - calling a component from a worklet without leaking it
+
+`runOnJS(fn)` / `scheduleOnRN(fn)` inside a worklet the component keeps (a Gesture in `useMemo`, a `useAnimatedReaction`, a scroll handler) makes react-native-worklets hold `fn` natively, and Hermes treats that as a GC root. When `fn` is one of the component's own callbacks, the component can never be collected. Register the callback and call only the module-level `callWorkletCallback` from the worklet:
+
+```tsx
+const key = useWorkletCallback(onClose)
+const tap = Gesture.Tap().onEnd(() => {
+  runOnJS(callWorkletCallback)(key)
+})
+```
+
+The latest callback is always called, a key is ignored after unmount, and arguments are whatever a worklet can send. One-shot `withTiming` completions the component does not keep do not need it.
+
 ## `OptionalModule<T>`
 
 Names the convention several packages already follow for the `paper`/`camera`/`autoPaper`-style
