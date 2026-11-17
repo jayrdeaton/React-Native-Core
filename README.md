@@ -274,3 +274,7 @@ npm install @rific/core
 - `expo-keep-awake` (>=12.0.0): optional. Only needed for Keep Awake, and only as the module you pass
   to `KeepAwakeProvider`'s `expoKeepAwake` prop; this package never imports it. 12.0.0 is the first
   version with `activateKeepAwakeAsync`.
+
+---
+
+Made by [Infinite Token](https://www.infinitetoken.com), the team behind [Lumber](https://lumber.infinitetoken.com): end-to-end encrypted logging.
