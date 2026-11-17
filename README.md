@@ -220,6 +220,7 @@ useKeepAwake('map', { active: recording })
   it whenever the page is hidden (another tab, another app, the screen off). Its calls run one at a
   time, so leaving the screen before the lock arrives still releases it.
 - `useKeepAwakeSettings()` is the `{ settings, set }` pair for a settings screen's toggle.
+  `KeepAwakeSettingsContext` is the React context it reads (`createSettingsContext`'s `Context`).
 - `useExpoKeepAwake()` returns the injected module, or `undefined` when there isn't one or the
   platform can't keep the screen awake: a browser without the Screen Wake Lock API (older
   browsers, and iPhone home-screen web apps before iOS 18.4). A settings screen should hide its
